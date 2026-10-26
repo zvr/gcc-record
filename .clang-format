@@ -1,0 +1,6 @@
+BasedOnStyle: InheritParentConfig
+TypeNames: 
+  - int64_t
+  - time_t
+  - uint8_t
+  - wchar_t
