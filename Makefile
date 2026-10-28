@@ -20,7 +20,12 @@ test: all
 	$(CC) -fplugin=../gcc_record.so -c hello.c && \
 	$(CC) -Wl,-plugin=../gcc-record-ld.so -o hello hello.o && \
 	echo "== hello.c.gcc-record" && cat hello.c.gcc-record && \
-	echo "== hello.gcc-record" && cat hello.gcc-record
+	echo "== hello.gcc-record" && cat hello.gcc-record && \
+	$(CC) -fplugin=../gcc_record.so -fplugin-arg-gcc_record-z -c hello.c && \
+	$(CC) -Wl,-plugin=../gcc-record-ld.so,-plugin-opt=-z -o hello hello.o && \
+	$(CC) -fplugin=../gcc_record.so -fplugin-arg-gcc_record-Z -c hello.c && \
+	$(CC) -Wl,-plugin=../gcc-record-ld.so,-plugin-opt=-Z -o hello hello.o && \
+	echo "== generated" && ls -l *.gcc-record*
 
 clean:
 	rm -f *.so tests/*.gcc-record* tests/hello.o tests/hello
