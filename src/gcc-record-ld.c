@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <plugin-api.h>
 
+#include "sha1file.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -71,7 +73,9 @@ cleanup (void)
     }
   for (i = 0; i < n_recorded; i++)
     {
-      fprintf (f, "%s\n", recorded[i]);
+      char hex[41];
+      sha1_file (recorded[i], hex);
+      fprintf (f, "%s\t%s\n", recorded[i], hex);
       free (recorded[i]);
     }
   fclose (f);

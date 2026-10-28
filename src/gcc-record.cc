@@ -2,6 +2,7 @@
 
 #include "gcc-plugin.h"
 #include "plugin-version.h"
+#include "sha1file.h"
 
 #include <cstdio>
 #include <cstring>
@@ -52,10 +53,15 @@ on_finish (void *, void *)
       fprintf (stderr, "gcc-record: cannot write %s\n", out.c_str ());
       return;
     }
-  fprintf (f, "%s\n", main_input_filename);
+  char hex[41];
+  sha1_file (main_input_filename, hex);
+  fprintf (f, "%s\t%s\n", main_input_filename, hex);
   for (const std::string &s : recorded)
     if (s != main_input_filename)
-      fprintf (f, "%s\n", s.c_str ());
+      {
+        sha1_file (s.c_str (), hex);
+        fprintf (f, "%s\t%s\n", s.c_str (), hex);
+      }
   fclose (f);
 }
 

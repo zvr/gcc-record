@@ -7,11 +7,11 @@ CXXFLAGS ?= -O2 -Wall
 
 all: gcc-record.so gcc-record-ld.so
 
-gcc-record.so: src/gcc-record.cc
-	$(CXX) $(CXXFLAGS) -shared -fPIC -fno-rtti -I$(PLUGIN_DIR)/include -o $@ $<
+gcc-record.so: src/gcc-record.cc src/sha1file.h
+	$(CXX) $(CXXFLAGS) -shared -fPIC -fno-rtti -I$(PLUGIN_DIR)/include -o $@ $< -lcrypto
 
-gcc-record-ld.so: src/gcc-record-ld.c
-	$(CC) $(CFLAGS) -shared -fPIC -o $@ $<
+gcc-record-ld.so: src/gcc-record-ld.c src/sha1file.h
+	$(CC) $(CFLAGS) -shared -fPIC -o $@ $< -lcrypto
 
 test: all
 	cd tests && rm -f *.gcc-record hello.o hello && \

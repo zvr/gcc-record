@@ -3,7 +3,7 @@ GCC plugin to record what is being done...
 
 ## Build
 
-Requires `gcc-NN-plugin-dev` and `binutils-dev`.
+Requires `gcc-NN-plugin-dev`, `binutils-dev` and `libssl-dev`.
 
     make        # builds gcc-record.so and gcc-record-ld.so
     make test
