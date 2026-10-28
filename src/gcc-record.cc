@@ -2,6 +2,7 @@
 
 #include "gcc-plugin.h"
 #include "plugin-version.h"
+#include "options.h"
 #include "sha1file.h"
 
 #include <cstdio>
@@ -38,13 +39,19 @@ on_finish (void *, void *)
     return;
 
   std::string out;
+  const char *base = strrchr (main_input_filename, '/');
+  base = base ? base + 1 : main_input_filename;
   if (!output_dir.empty ())
-    {
-      const char *base = strrchr (main_input_filename, '/');
-      out = output_dir + "/" + (base ? base + 1 : main_input_filename);
-    }
+    out = output_dir + "/" + base;
   else
-    out = main_input_filename;
+    {
+      /* The driver passes the object file's directory via -dumpdir
+         (possibly followed by a prefix such as "hello-").  */
+      const char *slash = dump_dir_name ? strrchr (dump_dir_name, '/') : NULL;
+      if (slash)
+        out.assign (dump_dir_name, slash - dump_dir_name + 1);
+      out += base;
+    }
   out += ".gcc-record";
 
   FILE *f = fopen (out.c_str (), "w");
