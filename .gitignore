@@ -1,4 +1,4 @@
-*.gcc-record
+*.gcc-record*
 *.o
 *.so
 .vs/

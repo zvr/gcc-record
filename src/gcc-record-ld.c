@@ -1,9 +1,11 @@
 /* gcc-record-ld: linker plugin recording the files read while linking.  */
 
+#define _GNU_SOURCE
 #include <stdint.h>
 #include <plugin-api.h>
 
 #include "sha1file.h"
+#include "record-write.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,6 +15,7 @@ static char **recorded;
 static size_t n_recorded, cap_recorded;
 static const char *output_name = "a.out";
 static const char *output_dir;
+static enum record_compress compress_mode = RECORD_PLAIN;
 static ld_plugin_message message;
 
 static void
@@ -47,7 +50,9 @@ static enum ld_plugin_status
 cleanup (void)
 {
   const char *base = output_name;
-  char *out;
+  char *out, *data = NULL;
+  size_t data_len = 0;
+  const char *suffix = record_suffix (compress_mode);
   FILE *f;
   size_t i;
 
@@ -57,19 +62,17 @@ cleanup (void)
       base = slash ? slash + 1 : output_name;
     }
   out = malloc ((output_dir ? strlen (output_dir) + 1 : 0) + strlen (base)
-		+ sizeof ".gcc-record");
+		+ sizeof ".gcc-record" + strlen (suffix));
   if (!out)
     return LDPS_ERR;
-  sprintf (out, "%s%s%s.gcc-record", output_dir ? output_dir : "",
-	   output_dir ? "/" : "", base);
+  sprintf (out, "%s%s%s.gcc-record%s", output_dir ? output_dir : "",
+	   output_dir ? "/" : "", base, suffix);
 
-  f = fopen (out, "w");
+  f = open_memstream (&data, &data_len);
   if (!f)
     {
-      if (message)
-	message (LDPL_WARNING, "gcc-record: cannot write %s", out);
       free (out);
-      return LDPS_OK;
+      return LDPS_ERR;
     }
   for (i = 0; i < n_recorded; i++)
     {
@@ -79,6 +82,9 @@ cleanup (void)
       free (recorded[i]);
     }
   fclose (f);
+  if (record_write (out, data, data_len, compress_mode) && message)
+    message (LDPL_WARNING, "gcc-record: cannot write %s", out);
+  free (data);
   free (out);
   free (recorded);
   recorded = NULL;
@@ -110,6 +116,12 @@ onload (struct ld_plugin_tv *tv)
       case LDPT_OPTION:
 	if (!strncmp (tv->tv_u.tv_string, "dir=", 4))
 	  output_dir = tv->tv_u.tv_string + 4;
+	else if (!strcmp (tv->tv_u.tv_string, "-z")
+		 || !strcmp (tv->tv_u.tv_string, "z"))
+	  compress_mode = RECORD_GZIP;
+	else if (!strcmp (tv->tv_u.tv_string, "-Z")
+		 || !strcmp (tv->tv_u.tv_string, "Z"))
+	  compress_mode = RECORD_ZSTD;
 	break;
       default:
 	break;

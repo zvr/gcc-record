@@ -1,5 +1,8 @@
 /* gcc-record: GCC plugin recording the files read while compiling.  */
 
+/* Must precede GCC headers, which poison malloc.  */
+#include "record-write.h"
+
 #include "gcc-plugin.h"
 #include "plugin-version.h"
 #include "options.h"
@@ -16,6 +19,7 @@ int plugin_is_GPL_compatible;
 static std::vector<std::string> recorded;
 static std::set<std::string> seen;
 static std::string output_dir;
+static enum record_compress compress_mode = RECORD_PLAIN;
 
 static void
 record_file (const char *name)
@@ -53,23 +57,20 @@ on_finish (void *, void *)
       out += base;
     }
   out += ".gcc-record";
+  out += record_suffix (compress_mode);
 
-  FILE *f = fopen (out.c_str (), "w");
-  if (!f)
-    {
-      fprintf (stderr, "gcc-record: cannot write %s\n", out.c_str ());
-      return;
-    }
+  std::string data;
   char hex[41];
   sha1_file (main_input_filename, hex);
-  fprintf (f, "%s\t%s\n", main_input_filename, hex);
+  data += std::string (main_input_filename) + "\t" + hex + "\n";
   for (const std::string &s : recorded)
     if (s != main_input_filename)
       {
         sha1_file (s.c_str (), hex);
-        fprintf (f, "%s\t%s\n", s.c_str (), hex);
+        data += s + "\t" + hex + "\n";
       }
-  fclose (f);
+  if (record_write (out.c_str (), data.data (), data.size (), compress_mode))
+    fprintf (stderr, "gcc-record: cannot write %s\n", out.c_str ());
 }
 
 int
@@ -82,8 +83,15 @@ plugin_init (struct plugin_name_args *info, struct plugin_gcc_version *version)
     }
 
   for (int i = 0; i < info->argc; i++)
-    if (!strcmp (info->argv[i].key, "dir") && info->argv[i].value)
-      output_dir = info->argv[i].value;
+    {
+      const char *key = info->argv[i].key;
+      if (!strcmp (key, "dir") && info->argv[i].value)
+        output_dir = info->argv[i].value;
+      else if (!strcmp (key, "z"))
+        compress_mode = RECORD_GZIP;
+      else if (!strcmp (key, "Z"))
+        compress_mode = RECORD_ZSTD;
+    }
 
   register_callback (info->base_name, PLUGIN_INCLUDE_FILE, on_include_file,
 		     NULL);
