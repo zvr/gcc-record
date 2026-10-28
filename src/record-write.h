@@ -62,7 +62,7 @@ record_write (const char *path, const char *data, size_t len,
 	      fclose (f);
 	      return -1;
 	    }
-	  n = ZSTD_compress (buf, cap, data, len, 19);
+	  n = ZSTD_compress (buf, cap, data, len, ZSTD_maxCLevel ());
 	  ok = !ZSTD_isError (n) && fwrite (buf, 1, n, f) == n;
 	  free (buf);
 	}
