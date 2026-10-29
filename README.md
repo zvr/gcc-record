@@ -14,11 +14,10 @@ The `gcc-record` script is a drop-in replacement for `gcc` that loads both plugi
 
     ./gcc-record -c src/hello.c -o out/hello.o    # -> out/hello.c.gcc-record
     ./gcc-record -o hello hello.o                  # -> hello.gcc-record
-    ./gcc-record -z ...                            # gzip-compressed records
-    ./gcc-record -Z ...                            # zstd-compressed records
+    ./gcc-record --record=gz ...                   # gzip-compressed records
+    ./gcc-record --record=zstd ...                 # zstd-compressed records
 
-All other arguments go to `gcc`; gcc's `-z KEYWORD` linker option (e.g. `-z now`)
-is still passed through. `GCC_RECORD_CC` selects the compiler (default `gcc`) and
+All other arguments (including `-z`/`-Z`) go to `gcc` unchanged.
 `GCC_RECORD_PLUGIN_DIR` the plugin location (default: the script's directory).
 
 Manual use of the plugins:

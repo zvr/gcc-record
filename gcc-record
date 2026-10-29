@@ -1,11 +1,10 @@
 #!/bin/sh
 # gcc-record: drop-in replacement for gcc that loads the gcc-record plugins.
 #
-#   -z   write gzip-compressed records (*.gcc-record.gz)
-#   -Z   write zstd-compressed records (*.gcc-record.zst)
+#   --record=gz     write gzip-compressed records (*.gcc-record.gz)
+#   --record=zstd   write zstd-compressed records (*.gcc-record.zst)
 #
-# All other arguments are passed to gcc unchanged.  gcc's own "-z KEYWORD"
-# linker option (e.g. "-z now", "-z relro") is recognized and passed through.
+# All other arguments (including -z/-Z) are passed to gcc unchanged.
 #
 # Environment:
 #   GCC_RECORD_CC          compiler to run (default: gcc)
@@ -30,24 +29,15 @@ for arg in "$@"; do
     set --
     first=
   fi
-  if [ -n "$pending_z" ]; then
-    pending_z=
-    case $arg in
-      -* | */* | *.*)
-	# Not a linker keyword: the preceding -z was ours.
-	mode=z ;;
-      *)
-	set -- "$@" -z "$arg"
-	continue ;;
-    esac
-  fi
   case $arg in
-    -z) pending_z=1 ;;
-    -Z) mode=Z ;;
+    --record=gz) mode=z ;;
+    --record=zstd) mode=Z ;;
+    --record=*)
+      echo "gcc-record: unknown compression '${arg#--record=}' (use gz or zstd)" >&2
+      exit 1 ;;
     *) set -- "$@" "$arg" ;;
   esac
 done
-[ -n "$pending_z" ] && mode=z
 
 cc_opts="-fplugin=$cc_plugin"
 ld_opts="-Wl,-plugin=$ld_plugin"
