@@ -10,6 +10,19 @@ Requires `gcc-NN-plugin-dev`, `binutils-dev`, `libssl-dev`, `zlib1g-dev` and `li
 
 ## Usage
 
+The `gcc-record` script is a drop-in replacement for `gcc` that loads both plugins:
+
+    ./gcc-record -c src/hello.c -o out/hello.o    # -> out/hello.c.gcc-record
+    ./gcc-record -o hello hello.o                  # -> hello.gcc-record
+    ./gcc-record -z ...                            # gzip-compressed records
+    ./gcc-record -Z ...                            # zstd-compressed records
+
+All other arguments go to `gcc`; gcc's `-z KEYWORD` linker option (e.g. `-z now`)
+is still passed through. `GCC_RECORD_CC` selects the compiler (default `gcc`) and
+`GCC_RECORD_PLUGIN_DIR` the plugin location (default: the script's directory).
+
+Manual use of the plugins:
+
     gcc -fplugin=./gcc_record.so -c hello.c                  # -> hello.c.gcc-record
     gcc -Wl,-plugin=./gcc-record-ld.so -o hello hello.o      # -> hello.gcc-record
 
