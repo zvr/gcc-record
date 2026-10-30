@@ -1,19 +1,29 @@
 #!/bin/sh
 # gcc-record: drop-in replacement for gcc that loads the gcc-record plugins.
 #
-#   --record=gz     write gzip-compressed records (*.gcc-record.gz)
-#   --record=zstd   write zstd-compressed records (*.gcc-record.zst)
+# The list of files read (one "filename<TAB>sha1" per line) is stored in a
+# non-allocated, read-only ELF section named "files_read":
+#   - when compiling, the compiler plugin emits it directly into the object;
+#   - when linking, the linker plugin merges its own inputs with the
+#     "files_read" sections of all input objects into a temporary file, and
+#     this script installs it as the single "files_read" section with objcopy.
+#
+#   --record=gz     gzip-compress the section contents
+#   --record=zstd   zstd-compress the section contents
 #
 # All other arguments (including -z/-Z) are passed to gcc unchanged.
 #
 # Environment:
 #   GCC_RECORD_CC          compiler to run (default: gcc)
+#   GCC_RECORD_OBJCOPY     objcopy to use (default: objcopy)
 #   GCC_RECORD_PLUGIN_DIR  directory holding the plugins (default: script dir)
 
 cc=${GCC_RECORD_CC:-gcc}
+objcopy=${GCC_RECORD_OBJCOPY:-objcopy}
 dir=${GCC_RECORD_PLUGIN_DIR:-$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}
 cc_plugin=$dir/gcc_record.so
 ld_plugin=$dir/gcc-record-ld.so
+section=files_read
 
 for p in "$cc_plugin" "$ld_plugin"; do
   if [ ! -f "$p" ]; then
@@ -23,28 +33,57 @@ for p in "$cc_plugin" "$ld_plugin"; do
 done
 
 mode=
+link=1
+output=a.out
+expect_o=
 first=1
 for arg in "$@"; do
   if [ -n "$first" ]; then
     set --
     first=
   fi
-  case $arg in
-    --record=gz) mode=z ;;
-    --record=zstd) mode=Z ;;
-    --record=*)
-      echo "gcc-record: unknown compression '${arg#--record=}' (use gz or zstd)" >&2
-      exit 1 ;;
-    *) set -- "$@" "$arg" ;;
-  esac
+  if [ -n "$expect_o" ]; then
+    output=$arg
+    expect_o=
+  else
+    case $arg in
+      --record=gz) mode=z; continue ;;
+      --record=zstd) mode=Z; continue ;;
+      --record=*)
+	echo "gcc-record: unknown compression '${arg#--record=}' (use gz or zstd)" >&2
+	exit 1 ;;
+      -c | -S | -E | -M | -MM) link= ;;
+      -o) expect_o=1 ;;
+      -o*) output=${arg#-o} ;;
+    esac
+  fi
+  set -- "$@" "$arg"
 done
 
 cc_opts="-fplugin=$cc_plugin"
-ld_opts="-Wl,-plugin=$ld_plugin"
-if [ -n "$mode" ]; then
-  cc_opts="$cc_opts -fplugin-arg-gcc_record-$mode"
-  ld_opts="$ld_opts,-plugin-opt=-$mode"
+[ -n "$mode" ] && cc_opts="$cc_opts -fplugin-arg-gcc_record-$mode"
+
+if [ -z "$link" ]; then
+  # shellcheck disable=SC2086
+  exec "$cc" $cc_opts "$@"
 fi
 
+tmp=$(mktemp "${TMPDIR:-/tmp}/gcc-record.XXXXXX") || exit 1
+trap 'rm -f "$tmp"' EXIT HUP INT TERM
+
+ld_opts="-Wl,-plugin=$ld_plugin,-plugin-opt=out=$tmp"
+[ -n "$mode" ] && ld_opts="$ld_opts,-plugin-opt=-$mode"
+
 # shellcheck disable=SC2086
-exec "$cc" $cc_opts $ld_opts "$@"
+"$cc" $cc_opts $ld_opts "$@" || exit
+
+# The linker concatenated the inputs' sections; replace them with the merged
+# list.
+if [ -f "$output" ]; then
+  "$objcopy" --remove-section="$section" "$output" &&
+    "$objcopy" --add-section "$section=$tmp" \
+      --set-section-flags "$section=noload,readonly" "$output" || {
+      echo "gcc-record: cannot add $section section to $output" >&2
+      exit 1
+    }
+fi

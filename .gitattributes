@@ -1,1 +1,2 @@
 gcc-record text eol=lf
+tests/run.sh text eol=lf
