@@ -1,6 +1,11 @@
 BasedOnStyle: InheritParentConfig
 TypeNames: 
   - int64_t
+  - ld_plugin_message
+  - ld_plugin_register_claim_file
+  - ld_plugin_register_cleanup
+  - off_t
+  - size_t
   - time_t
   - uint8_t
   - wchar_t
