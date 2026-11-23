@@ -1,0 +1,125 @@
+\documentclass[aspectratio=169]{beamer}
+
+\title{GCC Record: Embedding Build Inputs in ELF Binaries}
+\subtitle{A compiler and linker plugin experiment in build provenance}
+\date{FOSDEM 2027 --- GCC/GNU Toolchain devroom}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}{The build-input visibility gap}
+  \begin{itemize}
+    \item A build consumes more than the source file named on the command line
+    \item Compilation reads headers and other files; linking consumes objects, libraries, and startup files
+    \item Once the build finishes, those inputs are not necessarily easy to discover from the output
+    \item Separate logs and sidecar manifests can become detached from the artifact
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Why this is useful}
+  \begin{itemize}
+    \item Investigate which inputs contributed to a build artifact
+    \item Make build outputs easier to inspect during debugging and review
+    \item Keep a compact input record alongside the object or executable
+    \item Give downstream tooling a simple section to extract and analyze
+    \item Hashes help distinguish recorded file contents; they are not a signature or proof that a build is trustworthy
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Previous solutions: source identification keywords}
+  \begin{itemize}
+    \item SCCS and CVS supported identification keywords embedded in source text
+    \item Examples include SCCS \texttt{\%W\%} / \texttt{\%G\%} and CVS \texttt{\$Id\$} / \texttt{\$Revision\$}
+    \item These are useful for identifying individual source files and their revisions
+    \item They depend on keywords being present in source and expanded by the version-control workflow
+    \item They do not automatically provide a consolidated record of the files actually read across compilation and linking
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{What gcc-record does}
+  \begin{itemize}
+    \item Records the files observed during compilation and linking
+    \item Stores a path and SHA-1 digest for each recorded file
+    \item Embeds the record in a non-allocated, read-only ELF section named \texttt{files\_read}
+    \item Supports plain text, gzip, and zstd section contents
+    \item Provides a wrapper that loads the compiler and linker plugins automatically
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{A simple workflow}
+  \begin{itemize}
+    \item Build the plugins with \texttt{make}
+    \item Compile and link using \texttt{gcc-record} in place of \texttt{gcc}:
+      \begin{itemize}
+	\item \texttt{./gcc-record -c hello.c -o hello.o}
+	\item \texttt{./gcc-record -o hello hello.o}
+      \end{itemize}
+    \item Optional record compression: \texttt{--record=gz} or \texttt{--record=zstd}
+    \item Other compiler arguments, including GCC's \texttt{-z} and \texttt{-Z}, are passed through
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Compilation: record the translation unit}
+  \begin{itemize}
+    \item The GCC plugin observes included files and the main input file
+    \item At the end of compilation, it creates the \texttt{files\_read} section in the object
+    \item Each record is one path, a tab, and a SHA-1 digest per line
+    \item Section flags make it read-only and not loaded as part of the program image
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Linking: collect and merge}
+  \begin{itemize}
+    \item The linker plugin sees the linker's input files
+    \item It records their paths and digests, and scans ELF inputs for existing \texttt{files\_read} sections
+    \item Existing sections can be plain, gzip-compressed, or zstd-compressed
+    \item The plugin combines records and removes duplicate lines
+    \item The linker plugin writes a merged temporary record; the wrapper uses \texttt{objcopy} to install one final section
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Inspecting the result}
+  \begin{itemize}
+    \item Confirm the section exists with \texttt{readelf -S -W hello}
+    \item Extract it with:
+      \begin{itemize}
+	\item \small\texttt{objcopy --dump-section files\_read=inputs.txt hello /dev/null}
+      \end{itemize}
+    \item The extracted list can be reviewed or consumed by downstream scripts
+    \item The record stays with the object or executable when copied as a file
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Demonstration}
+  \begin{itemize}
+    \item Compile two source files separately with \texttt{gcc-record}
+    \item Show the \texttt{files\_read} section in each object
+    \item Link the objects and inspect the resulting executable's section
+    \item Check that the final list includes source/header files, object files, and linker inputs
+    \item Repeat with gzip and zstd modes; run the generated program
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Scope and limitations}
+  \begin{itemize}
+    \item The current implementation targets ELF and GCC's plugin interface
+    \item It records files observed by the compiler and linker plugins; it is not a full hermetic-build system
+    \item Paths depend on the build environment and may not be portable
+    \item Consumers should treat the section as build metadata, not as a security attestation
+    \item Compression reduces section size but requires a compatible decoder to inspect the contents
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Wrap-up and discussion}
+  \begin{itemize}
+    \item gcc-record puts a useful record of observed build inputs inside ELF artifacts
+    \item Compiler and linker plugins capture per-object records and combine them at link time
+    \item The result is directly inspectable with familiar binutils tools
+    \item Discussion: what additional metadata or integration would make this more useful in real toolchains?
+  \end{itemize}
+\end{frame}
+
+\end{document}
